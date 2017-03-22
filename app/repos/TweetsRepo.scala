@@ -3,7 +3,7 @@ package repos
 import slick.driver.H2Driver.api._
 import play.api.libs.json.{JsObject, Json}
 import concurrent._
-import model.Tweet
+import model.{Tweet, TweetsTable}
 import scala.util.{Success, Failure}
 import concurrent.ExecutionContext.Implicits.global
 
@@ -19,7 +19,7 @@ trait TweetsRepo {
 class TweetsRepoImpl extends TweetsRepo {
 
   /* initialize repository */
-  val tweets = TableQuery[Tweets]
+  val tweets = TableQuery[TweetsTable]
   val db = Database.forConfig("h2mem")
   val setupAction: DBIO[Unit] = DBIO.seq(
     tweets.schema.create
@@ -33,7 +33,10 @@ class TweetsRepoImpl extends TweetsRepo {
 
   /* Public API */
   def findById(id: Long): Future[Tweet] = db.run(filterById(id).result.head)
-  def list: Future[Seq[Tweet]] = db.run(tweets.result)
+  def list: Future[Seq[Tweet]] = {
+    insert(new Tweet(Option(1.asInstanceOf[Long]), "a", "b", "c"))
+    db.run(tweets.result)
+  }
   def insert(tweet: Tweet): Future[Int] = db.run(tweets += tweet)
   def update(id: Long, tweet: Tweet): Future[Int] = db.run(filterById(id).update(tweet))
   def delete(id: Long): Future[Int] = db.run(filterById(id).delete)
