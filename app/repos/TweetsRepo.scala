@@ -33,10 +33,7 @@ class TweetsRepoImpl extends TweetsRepo {
 
   /* Public API */
   def findById(id: Long): Future[Tweet] = db.run(filterById(id).result.head)
-  def list: Future[Seq[Tweet]] = {
-    insert(new Tweet(Option(1.asInstanceOf[Long]), "a", "b", "c"))
-    db.run(tweets.result)
-  }
+  def list: Future[Seq[Tweet]] = db.run(tweets.result)
   def insert(tweet: Tweet): Future[Int] = db.run(tweets += tweet)
   def update(id: Long, tweet: Tweet): Future[Int] = db.run(filterById(id).update(tweet))
   def delete(id: Long): Future[Int] = db.run(filterById(id).delete)

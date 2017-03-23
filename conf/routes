@@ -9,7 +9,8 @@ GET     /                           controllers.HomeController.index
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 
 # Tweets
-GET        /api/tweets/:id          controllers.TweetsController.get(id: Int)
 GET        /api/tweets              controllers.TweetsController.list
+POST       /api/tweets              controllers.TweetsController.save
+GET        /api/tweets/:id          controllers.TweetsController.get(id: Int)
 DELETE     /api/tweets/:id          controllers.TweetsController.delete(id: Int)
 PATCH      /api/tweets/:id          controllers.TweetsController.update(id: Int)
