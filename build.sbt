@@ -1,4 +1,4 @@
-name := """scala-advanced"""
+name := "scala-advanced"
 
 version := "1.0-SNAPSHOT"
 
