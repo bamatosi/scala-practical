@@ -38,7 +38,7 @@ class TweetsController @Inject()(
       .map(tweet => Ok(Json.toJson(tweet)))
       .recover {
         case ex: Exception => {
-          val error = new Error("DB", "Getting #" + id + " failed: " + ex.getMessage)
+          val error = new Error("Controller", "Getting #" + id + " failed: " + ex.getMessage)
           InternalServerError(Json.toJson(error))
         }
       }
@@ -56,16 +56,42 @@ class TweetsController @Inject()(
           .map (result => Ok(Json.toJson(tweet)))
           .recover {
               case ex: Exception =>
-                Logger.error("Problem found in employee save process")
-                InternalServerError(ex.getMessage)
+                val error = new Error("Controller", "Saving tweet failed: "+ex.getMessage())
+                InternalServerError(Json.toJson(error))
           }
       })
   }
 
   // delete tweet by id
-  def delete(id: Int) = TODO
+  def delete(id: Int) = Action.async { implicit request =>
+    tweetsRepo
+      .delete(id)
+      .map(tweet => Ok(Json.toJson(tweet)))
+      .recover {
+        case ex: Exception => {
+          val error = new Error("Controller", "Deleting #" + id + " failed: " + ex.getMessage)
+          InternalServerError(Json.toJson(error))
+        }
+      }
+  }
+
   // update/replace existing tweet
-  def update(id: Int) = TODO
+  def update(id: Int) = Action.async { implicit request =>
+    tweetForm.bindFromRequest.fold(
+      formWithErrors => Future {
+        val error = new Error("Controller", "Tweet updating failed")
+        InternalServerError(Json.toJson(error))
+      },
+      tweet => {
+        tweetsRepo.update(id, tweet.copy(id = Some(id)))
+          .map(result => Ok(Json.toJson(tweet)))
+          .recover {
+            case ex: Exception =>
+              val error = new Error("Controller", "Updating #" + id + " failed: "+ex.getMessage())
+              InternalServerError(Json.toJson(error))
+          }
+      })
+  }
 
   // list tweets by pages
   def list = Action.async { implicit request =>
