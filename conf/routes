@@ -14,3 +14,5 @@ POST       /api/tweets              controllers.TweetsController.save
 GET        /api/tweets/:id          controllers.TweetsController.get(id: Int)
 DELETE     /api/tweets/:id          controllers.TweetsController.delete(id: Int)
 PATCH      /api/tweets/:id          controllers.TweetsController.update(id: Int)
+POST       /api/tweets/fetch        controllers.FetchController.fetch
+GET        /api/tweets/status/:uuid controllers.FetchController.status(uuid: String)

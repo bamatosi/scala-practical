@@ -12,7 +12,9 @@ libraryDependencies ++= Seq(
   ws,
   "org.scalatestplus.play" %% "scalatestplus-play" % "1.5.1" % Test,
   "com.typesafe.slick" %% "slick" % "3.0.0",
-  "com.h2database" % "h2" % "1.4.187"
+  "com.h2database" % "h2" % "1.4.187",
+  "com.typesafe.akka" %% "akka-actor" % "2.4.17",
+  "com.typesafe.akka" %% "akka-http" % "10.0.5"
 )
 
 
