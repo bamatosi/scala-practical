@@ -35,7 +35,7 @@ class FetchController @Inject()(
     val uuid = java.util.UUID.randomUUID.toString
 
     // TODO Terminate master when its work is done
-    val fetchMaster = twitter.actorOf(FetchActorMaster.props(uuid, tags), "FetchMaster-"+uuid)
+    val fetchMaster = twitter.actorOf(FetchActorMaster.props(uuid, tags, tweetsRepo), "FetchMaster-"+uuid)
     masterMap += (uuid -> fetchMaster)
 
     Ok("Started "+uuid)
@@ -45,7 +45,7 @@ class FetchController @Inject()(
     if (masterMap.contains(uuid)) {
       val fetchMaster = masterMap(uuid);
       implicit val timeout = Timeout(10, TimeUnit.SECONDS)
-      val statusFuture = (fetchMaster ? FetchActorMaster.Status).mapTo[Map[String,Boolean]]
+      val statusFuture = (fetchMaster ? FetchActorMaster.StatusPropagate).mapTo[Map[String,Boolean]]
       statusFuture.map(result => {
         println(result)
         Ok("Status OK") // TODO Provide Writeable for result and output it in response

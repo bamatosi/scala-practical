@@ -9,35 +9,92 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
 
+import java.util.Base64
+import java.nio.charset.StandardCharsets
+import java.net.{URLEncoder}
+
+import play.api.libs.json._
+import play.api.libs.json.Reads._
+
+// Custom validation helpers
+import play.api.libs.functional.syntax._
+
+// Combinator syntax
+
+import model.Tweet
+import repos.TweetsRepoImpl
+
 object FetchActorWorker {
 
   case object Running
 
   case object Initialize
 
-  def props(tag: String): Props = Props(new FetchActorWorker(tag))
+  def props(tag: String, authToken: String, tweetsRepo: TweetsRepoImpl): Props = Props(new FetchActorWorker(tag, authToken, tweetsRepo))
 }
 
-class FetchActorWorker(tag: String) extends Actor {
+/* Response reads */
+case class SearchResults(statuses: Seq[Tweet], metaData: MetaData)
+case class Url(url: String, expanded_url: String)
+case class MetaData(maxId: Long, sinceId: Long, nextResults: Option[String], refreshUrl: Option[String])
+
+class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImpl) extends Actor {
 
   import akka.pattern.pipe
   import context.dispatcher
+  import HttpProtocols._
+  import MediaTypes._
+  import HttpCharsets._
+  import HttpMethods._
+
+  /* Params */
+  val encodedTag = URLEncoder.encode(tag, "UTF-8")
+  var pages = 5
+  var defaultFetchParams = s"?q=$encodedTag&count=5&include_entities=1"
+  val basePath = s"https://api.twitter.com/1.1/search/tweets.json"
 
   val log = Logging(context.system, this)
-  val http = Http(context.system)
-
-  final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
   val httpClient = Http(context.system)
+  final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
 
-  override def postStop():Unit = {
+  /* Reads */
+  implicit val urlRead: Reads[Url] = (
+    (JsPath \ "url").read[String] and
+    (JsPath \ "expanded_url").read[String]
+  ) (Url.apply _)
+
+  // Tweet (id: Option[Long] = None, author: String, message: String, link: String)
+  implicit val statusReads: Reads[Tweet] = (
+    (JsPath \ "id_str").readNullable[String].map[Option[Long]]((v) => v match {
+      case Some(d: String) => Some(d.toLong)
+      case _ => None
+    }) and
+    (JsPath \ "user" \ "screen_name").read[String] and
+    (JsPath \ "text").read[String] and
+    (JsPath \ "entities" \ "urls").read[Seq[Url]].map[String]((v) => if (v.length>0) v(0).url else "")
+  ) (Tweet.apply _)
+
+  implicit val searchMetadataReads: Reads[MetaData] = (
+    (JsPath \ "max_id_str").read[String].map[Long]((v) => v.toLong) and
+    (JsPath \ "since_id_str").read[String].map[Long]((v) => v.toLong) and
+    (JsPath \ "next_results").readNullable[String] and
+    (JsPath \ "refresh_url").readNullable[String]
+  ) (MetaData.apply _)
+
+  implicit val tweetsReads: Reads[SearchResults] = (
+    (JsPath \ "statuses").read[Seq[Tweet]] and
+    (JsPath \ "search_metadata").read[MetaData]
+  ) (SearchResults.apply _)
+
+  override def postStop(): Unit = {
     log.info(s"Worker processing $tag stopped")
   }
 
   def receive = {
     case FetchActorWorker.Initialize => {
-      log.info("initialize with " + tag)
+      log.info(s"Initialize fetch for '$tag'")
       sender() ! FetchActorWorker.Running
-      httpClient.singleRequest(HttpRequest(uri = "http://akka.io")).pipeTo(self)
+      httpClient.singleRequest(fetch(authToken, defaultFetchParams)).pipeTo(self)
     }
 
     /*
@@ -45,13 +102,28 @@ class FetchActorWorker(tag: String) extends Actor {
      */
     case HttpResponse(StatusCodes.OK, headers, entity, _) => {
       entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-        log.info("Got response")
-        val max = 10
-        for (i <- 1 to max) {
-          context.parent ! new FetchActorMaster.StatusUpdate(tag, i / max * 100)
+        val json = Json.parse(body.utf8String)
+        json.validate[SearchResults] match {
+          case s: JsSuccess[SearchResults] => {
+            val response: SearchResults = s.get
+            val tweets: Seq[Tweet] = response.statuses
+            val metaData: MetaData = response.metaData
+
+            for (tweet <- tweets) yield tweetsRepo.insert(tweet)
+
+            metaData.nextResults match {
+              case Some(nextResults: String) => if (pages > 0) {
+                pages -= 1
+                httpClient.singleRequest(fetch(authToken, nextResults)).pipeTo(self)
+              }
+              case None => log.info("No more results")
+            }
+          }
+          case e: JsError => log.error(e.toString)
         }
       }
     }
+
     /*
      * Piped non-success response
      */
@@ -61,9 +133,16 @@ class FetchActorWorker(tag: String) extends Actor {
     }
   }
 
-  // Twitter authentication
-  // def authenticate(consumerKey: String, consumerSecret: String): ???
-
   // Twitter data fetch for a specific tag
-  //def fetch(tag: String): ???
+  def fetch(authToken: String, params: String): HttpRequest = {
+    /*
+    GET https://api.twitter.com/1.1/search/tweets.json?q={HTTP encoded string}
+    + header
+      Authorization: Bearer AAAAAAAAAAAAAAAAAAAAALIo0AAAAAAASoA3fY9Ycgxf5O2pYqVz%2FlHm5bs%3DD3VSfjGjgNISgFHukKq6k09tIHeJtaZasthEl8KhDFcxFY8Koi
+    */
+    val authorization = headers.Authorization(headers.OAuth2BearerToken(authToken))
+    val uri = s"$basePath$params"
+    log.info(s"Calling $uri")
+    HttpRequest(GET, uri = uri, headers = List(authorization), protocol = `HTTP/1.0`)
+  }
 }
