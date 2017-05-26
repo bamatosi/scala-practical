@@ -39,11 +39,11 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
   val httpClient = Http(context.system)
   final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
 
-  var workLoad = Map[String, Boolean]()
+  var workLoad = Map[String, String]()
 
-  /* Twitter auth and REST API config - move to props */
-  val consumerKey = "T4BJURJjkXZmUjPUcW8S6MtDJ"
-  val consumerSecret = "oq1gDqknDkndPKuYdNAUad7hlCtrE2D4tGe5S55V9jmhPxJMIC"
+  /* Twitter auth and REST API config  */
+  val consumerKey = "eY4xR9bzT9kc84URZMbAYSsjw"
+  val consumerSecret = "uVqLYmQDdfGe2pbr5npzR3CzU7PCbHR5ZF79MftR7CvFpoFG5U"
 
   override def preStart(): Unit = {
     log.info("Starting Master and authenticating to twitter API")
@@ -62,7 +62,11 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
 
     case FetchActorMaster.StatusUpdate(tag, progress) => {
       log.info(s"Updating status for $tag: $progress")
-      workLoad(tag) = (progress == 100)
+      workLoad(tag) = progress match {
+        case -1 => "error"
+        case 0 => "processing"
+        case 1 => "done"
+      }
     }
 
     /*
@@ -77,8 +81,8 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
             log.error("Unexpected authentication response")
           }
           case Some(accessToken) => {
-            workLoad = initializeWorkers(accessToken, tags)
-            log.info(s"Authentication sucessfull. Workers started $workLoad")
+            initializeWorkers(accessToken, tags)
+            log.info(s"Authentication sucessfull. Workers started.")
           }
         }
       }
@@ -114,9 +118,7 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
     )
   }
 
-  def initializeWorkers(accessToken: String, tags: Option[Seq[String]]): Map[String, Boolean] = {
-    val workLoad = Map[String, Boolean]();
-
+  def initializeWorkers(accessToken: String, tags: Option[Seq[String]]): Unit = {
     // create actors for each tag
     tags match {
       case Some(tags) => {
@@ -124,14 +126,11 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
           // TODO Provide a cleanup for an actor (worker should be terminated when finishing work)
           val worker = context.actorOf(FetchActorWorker.props(tag, accessToken, tweetsRepo), "worker" + tag.replaceAll("[^A-Z-a-z0-9]", "_"))
           worker ! FetchActorWorker.Initialize
-          workLoad += (tag -> false)
         })
       }
       case None => {
         log.info("No worker initialized since no tags provided.")
       }
     }
-
-    workLoad
   }
 }

@@ -22,6 +22,9 @@ import scala.concurrent.ExecutionContext.Implicits.global // Needed for Future e
 import jobs.FetchActorMaster
 import repos.TweetsRepoImpl
 
+import model.Error
+import model.ErrorJSON._
+
 @Singleton
 class FetchController @Inject()(
   tweetsRepo: TweetsRepoImpl
@@ -45,17 +48,23 @@ class FetchController @Inject()(
     if (masterMap.contains(uuid)) {
       val fetchMaster = masterMap(uuid);
       implicit val timeout = Timeout(10, TimeUnit.SECONDS)
-      val statusFuture = (fetchMaster ? FetchActorMaster.StatusPropagate).mapTo[Map[String,Boolean]]
+      val statusFuture = (fetchMaster ? FetchActorMaster.StatusPropagate).mapTo[Map[String,String]]
       statusFuture.map(result => {
-        println(result)
-        Ok("Status OK") // TODO Provide Writeable for result and output it in response
+        Ok(Json.toJson(result))
        }).recover {
-        case ex: AskTimeoutException => Ok("Status timeout expired")
-        case _ => Ok("Error")
+        case ex: AskTimeoutException => {
+          val error = new Error("Controller", "Status timeout expired")
+          InternalServerError(Json.toJson(error))
+        }
+        case ex: Exception => {
+          val error = new Error("Controller", "Error: "+ex.getMessage())
+          InternalServerError(Json.toJson(error))
+        }
       }
     } else {
       Future {
-        Ok("No master uuid found")
+        val error = new Error("Controller", "No master uuid found")
+        InternalServerError(Json.toJson(error))
       }
     }
   }

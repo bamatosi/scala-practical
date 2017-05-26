@@ -8,25 +8,17 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
-
 import java.util.Base64
 import java.nio.charset.StandardCharsets
-import java.net.{URLEncoder}
+import java.net.URLEncoder
 
 import play.api.libs.json._
 import play.api.libs.json.Reads._
-
-// Custom validation helpers
 import play.api.libs.functional.syntax._
-
-// Combinator syntax
-
 import model.Tweet
 import repos.TweetsRepoImpl
 
 object FetchActorWorker {
-
-  case object Running
 
   case object Initialize
 
@@ -49,9 +41,9 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
 
   /* Params */
   val encodedTag = URLEncoder.encode(tag, "UTF-8")
-  var pages = 5
   var defaultFetchParams = s"?q=$encodedTag&count=5&include_entities=1"
-  val basePath = s"https://api.twitter.com/1.1/search/tweets.json"
+  var pages = 20
+  val basePath = "https://api.twitter.com/1.1/search/tweets.json"
 
   val log = Logging(context.system, this)
   val httpClient = Http(context.system)
@@ -93,7 +85,7 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
   def receive = {
     case FetchActorWorker.Initialize => {
       log.info(s"Initialize fetch for '$tag'")
-      sender() ! FetchActorWorker.Running
+      sender() ! new FetchActorMaster.StatusUpdate(tag, 0)
       httpClient.singleRequest(fetch(authToken, defaultFetchParams)).pipeTo(self)
     }
 
@@ -112,14 +104,23 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
             for (tweet <- tweets) yield tweetsRepo.insert(tweet)
 
             metaData.nextResults match {
-              case Some(nextResults: String) => if (pages > 0) {
+              case Some(nextResults: String) if (pages > 0) => {
                 pages -= 1
                 httpClient.singleRequest(fetch(authToken, nextResults)).pipeTo(self)
               }
-              case None => log.info("No more results")
+              case Some(_) if (pages == 0) => {
+                context.parent ! new FetchActorMaster.StatusUpdate(tag, 1)
+              }
+              case None => {
+                log.info("No more results")
+                context.parent ! new FetchActorMaster.StatusUpdate(tag, 1)
+              }
             }
           }
-          case e: JsError => log.error(e.toString)
+          case e: JsError => {
+            log.error(e.toString)
+            context.parent ! new FetchActorMaster.StatusUpdate(tag, -1)
+          }
         }
       }
     }
@@ -129,6 +130,7 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
      */
     case resp@HttpResponse(code, _, _, _) => {
       log.info("Request failed, response code: " + code)
+      context.parent ! new FetchActorMaster.StatusUpdate(tag, -1)
       resp.discardEntityBytes()
     }
   }
