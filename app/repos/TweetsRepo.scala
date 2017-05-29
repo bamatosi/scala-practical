@@ -1,10 +1,10 @@
 package repos
 
 import slick.driver.H2Driver.api._
-import play.api.libs.json.{JsObject, Json}
 import concurrent._
 import model.{Tweet, TweetsTable}
-import scala.util.{Success, Failure}
+import slick.driver.H2Driver
+import scala.util.{Failure, Success}
 import concurrent.ExecutionContext.Implicits.global
 
 trait TweetsRepo {
@@ -19,13 +19,13 @@ trait TweetsRepo {
 class TweetsRepoImpl extends TweetsRepo {
 
   /* initialize repository */
-  val tweets = TableQuery[TweetsTable]
-  val db = Database.forConfig("h2mem")
+  val tweets: TableQuery[TweetsTable] = TableQuery[TweetsTable]
+  val db: H2Driver.backend.Database = Database.forConfig("h2mem")
   val setupAction: DBIO[Unit] = DBIO.seq(
     tweets.schema.create
   )
   db.run(setupAction).onComplete {
-    case Success(posts) => println("TweetsRepoImpl initialized")
+    case Success(_) => println("TweetsRepoImpl initialized")
     case Failure(t) => println("Initialization error has occured: " + t.getMessage)
   }
 

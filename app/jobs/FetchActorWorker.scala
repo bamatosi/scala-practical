@@ -1,17 +1,13 @@
 package jobs
 
 import akka.actor.Actor
-import akka.event.Logging
+import akka.event.{Logging, LoggingAdapter}
 import akka.actor.Props
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{Http, HttpExt}
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Directives._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
-import java.util.Base64
-import java.nio.charset.StandardCharsets
 import java.net.URLEncoder
-
 import play.api.libs.json._
 import play.api.libs.json.Reads._
 import play.api.libs.functional.syntax._
@@ -35,18 +31,16 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
   import akka.pattern.pipe
   import context.dispatcher
   import HttpProtocols._
-  import MediaTypes._
-  import HttpCharsets._
   import HttpMethods._
 
   /* Params */
-  val encodedTag = URLEncoder.encode(tag, "UTF-8")
-  var defaultFetchParams = s"?q=$encodedTag&count=5&include_entities=1"
-  var pages = 20
-  val basePath = "https://api.twitter.com/1.1/search/tweets.json"
+  val encodedTag: String = URLEncoder.encode(tag, "UTF-8")
+  var defaultFetchParams: String = s"?q=$encodedTag&count=5&include_entities=1"
+  var pages: Int = 20
+  val basePath: String = "https://api.twitter.com/1.1/search/tweets.json"
 
-  val log = Logging(context.system, this)
-  val httpClient = Http(context.system)
+  val log: LoggingAdapter = Logging(context.system, this)
+  val httpClient: HttpExt = Http(context.system)
   final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
 
   /* Reads */
@@ -55,15 +49,14 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
     (JsPath \ "expanded_url").read[String]
   ) (Url.apply _)
 
-  // Tweet (id: Option[Long] = None, author: String, message: String, link: String)
   implicit val statusReads: Reads[Tweet] = (
-    (JsPath \ "id_str").readNullable[String].map[Option[Long]]((v) => v match {
+    (JsPath \ "id_str").readNullable[String].map[Option[Long]] {
       case Some(d: String) => Some(d.toLong)
       case _ => None
-    }) and
+    } and
     (JsPath \ "user" \ "screen_name").read[String] and
     (JsPath \ "text").read[String] and
-    (JsPath \ "entities" \ "urls").read[Seq[Url]].map[String]((v) => if (v.length>0) v(0).url else "")
+    (JsPath \ "entities" \ "urls").read[Seq[Url]].map[String]((v) => if (v.nonEmpty) v.head.url else "")
   ) (Tweet.apply _)
 
   implicit val searchMetadataReads: Reads[MetaData] = (
@@ -82,21 +75,20 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
     log.info(s"Worker processing $tag stopped")
   }
 
-  def receive = {
-    case FetchActorWorker.Initialize => {
+  def receive: PartialFunction[Any, Unit] = {
+    case FetchActorWorker.Initialize =>
       log.info(s"Initialize fetch for '$tag'")
-      sender() ! new FetchActorMaster.StatusUpdate(tag, 0)
+      sender() ! FetchActorMaster.StatusUpdate(tag, 0)
       httpClient.singleRequest(fetch(authToken, defaultFetchParams)).pipeTo(self)
-    }
 
     /*
      * Piped success response
      */
-    case HttpResponse(StatusCodes.OK, headers, entity, _) => {
+    case HttpResponse(StatusCodes.OK, _, entity, _) =>
       entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
         val json = Json.parse(body.utf8String)
         json.validate[SearchResults] match {
-          case s: JsSuccess[SearchResults] => {
+          case s: JsSuccess[SearchResults] =>
             val response: SearchResults = s.get
             val tweets: Seq[Tweet] = response.statuses
             val metaData: MetaData = response.metaData
@@ -104,35 +96,28 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
             for (tweet <- tweets) yield tweetsRepo.insert(tweet)
 
             metaData.nextResults match {
-              case Some(nextResults: String) if (pages > 0) => {
+              case Some(nextResults: String) if pages > 0 =>
                 pages -= 1
                 httpClient.singleRequest(fetch(authToken, nextResults)).pipeTo(self)
-              }
-              case Some(_) if (pages == 0) => {
-                context.parent ! new FetchActorMaster.StatusUpdate(tag, 1)
-              }
-              case None => {
+              case Some(_) if pages == 0 =>
+                context.parent ! FetchActorMaster.StatusUpdate(tag, 1)
+              case None =>
                 log.info("No more results")
-                context.parent ! new FetchActorMaster.StatusUpdate(tag, 1)
-              }
+                context.parent ! FetchActorMaster.StatusUpdate(tag, 1)
             }
-          }
-          case e: JsError => {
+          case e: JsError =>
             log.error(e.toString)
-            context.parent ! new FetchActorMaster.StatusUpdate(tag, -1)
-          }
+            context.parent ! FetchActorMaster.StatusUpdate(tag, -1)
         }
       }
-    }
 
     /*
      * Piped non-success response
      */
-    case resp@HttpResponse(code, _, _, _) => {
+    case resp@HttpResponse(code, _, _, _) =>
       log.info("Request failed, response code: " + code)
-      context.parent ! new FetchActorMaster.StatusUpdate(tag, -1)
+      context.parent ! FetchActorMaster.StatusUpdate(tag, -1)
       resp.discardEntityBytes()
-    }
   }
 
   // Twitter data fetch for a specific tag

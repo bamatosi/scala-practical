@@ -5,17 +5,11 @@ import akka.event.Logging
 import akka.actor.Props
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Directives._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
-
-import java.util.Base64
-import java.nio.charset.StandardCharsets
-import java.net.{URLEncoder}
 import play.api.libs.json._
-
-import scala.collection.mutable.Map
-import repos.TweetsRepoImpl;
+import repos.TweetsRepoImpl
+import scala.collection.mutable
 
 object FetchActorMaster {
 
@@ -39,7 +33,7 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
   val httpClient = Http(context.system)
   final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
 
-  var workLoad = Map[String, String]()
+  var workLoad: mutable.Map[String, String] = mutable.Map[String, String]()
 
   /* Twitter auth and REST API config  */
   val consumerKey = "eY4xR9bzT9kc84URZMbAYSsjw"
@@ -54,47 +48,41 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
     log.info(s"Master $uuid stopped")
   }
 
-  def receive = {
-    case FetchActorMaster.StatusPropagate => {
+  def receive: PartialFunction[Any, Unit] = {
+    case FetchActorMaster.StatusPropagate =>
       log.info("Propagating status")
       sender() ! workLoad
-    }
 
-    case FetchActorMaster.StatusUpdate(tag, progress) => {
+    case FetchActorMaster.StatusUpdate(tag, progress) =>
       log.info(s"Updating status for $tag: $progress")
       workLoad(tag) = progress match {
         case -1 => "error"
         case 0 => "processing"
         case 1 => "done"
       }
-    }
 
     /*
     * Piped success response
     */
-    case HttpResponse(StatusCodes.OK, headers, entity, _) => {
+    case HttpResponse(StatusCodes.OK, _, entity, _) =>
       entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
         val json = Json.parse(body.utf8String)
         val maybeAuth = (json \ "access_token").asOpt[String]
         maybeAuth match {
-          case None => {
+          case None =>
             log.error("Unexpected authentication response")
-          }
-          case Some(accessToken) => {
+          case Some(accessToken) =>
             initializeWorkers(accessToken, tags)
-            log.info(s"Authentication sucessfull. Workers started.")
-          }
+            log.info(s"Authentication successful. Workers started.")
         }
       }
-    }
 
     /*
     * Piped non-success response
     */
-    case resp@HttpResponse(code, _, _, _) => {
+    case resp@HttpResponse(code, _, _, _) =>
       log.info(s"Authentication request failed, response code: $code")
       resp.discardEntityBytes()
-    }
   }
 
   // Twitter authentication request
@@ -121,16 +109,14 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
   def initializeWorkers(accessToken: String, tags: Option[Seq[String]]): Unit = {
     // create actors for each tag
     tags match {
-      case Some(tags) => {
+      case Some(tags) =>
         tags.foreach(tag => {
           // TODO Provide a cleanup for an actor (worker should be terminated when finishing work)
           val worker = context.actorOf(FetchActorWorker.props(tag, accessToken, tweetsRepo), "worker" + tag.replaceAll("[^A-Z-a-z0-9]", "_"))
           worker ! FetchActorWorker.Initialize
         })
-      }
-      case None => {
+      case None =>
         log.info("No worker initialized since no tags provided.")
-      }
     }
   }
 }
