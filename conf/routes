@@ -12,6 +12,7 @@ GET     /assets/*file               controllers.Assets.versioned(path="/public",
 GET        /api/tweets              controllers.TweetsController.list
 POST       /api/tweets              controllers.TweetsController.save
 GET        /api/tweets/:id          controllers.TweetsController.get(id: Int)
+GET        /api/tweets/:id/more     controllers.TweetsController.recommendFor(id: Int)
 DELETE     /api/tweets/:id          controllers.TweetsController.delete(id: Int)
 PATCH      /api/tweets/:id          controllers.TweetsController.update(id: Int)
 POST       /api/tweets/fetch        controllers.FetchController.fetch

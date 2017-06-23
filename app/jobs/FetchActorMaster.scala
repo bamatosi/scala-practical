@@ -53,13 +53,22 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
       log.info("Propagating status")
       sender() ! workLoad
 
-    case FetchActorMaster.StatusUpdate(tag, progress) =>
+    case FetchActorMaster.StatusUpdate(tag, progress) => {
       log.info(s"Updating status for $tag: $progress")
       workLoad(tag) = progress match {
         case -1 => "error"
         case 0 => "processing"
         case 1 => "done"
       }
+      // Close master and trigger indexer when all tags are processed
+      val numberProcessed = workLoad.values.groupBy(identity).mapValues(_.size).getOrElse("done",0)
+      val numberAll = workLoad.keys.size
+      if (numberProcessed == numberAll) {
+        println(tweetsRepo)
+        tweetsRepo.indexTweets()
+        context.stop(self)
+      }
+    }
 
     /*
     * Piped success response
@@ -111,7 +120,6 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
     tags match {
       case Some(tags) =>
         tags.foreach(tag => {
-          // TODO Provide a cleanup for an actor (worker should be terminated when finishing work)
           val worker = context.actorOf(FetchActorWorker.props(tag, accessToken, tweetsRepo), "worker" + tag.replaceAll("[^A-Z-a-z0-9]", "_"))
           worker ! FetchActorWorker.Initialize
         })

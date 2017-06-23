@@ -1,9 +1,13 @@
 package repos
 
+import javax.inject.Singleton
+
 import slick.driver.H2Driver.api._
+
 import concurrent._
-import model.{Tweet, TweetsTable}
+import model._
 import slick.driver.H2Driver
+
 import scala.util.{Failure, Success}
 import concurrent.ExecutionContext.Implicits.global
 
@@ -14,8 +18,11 @@ trait TweetsRepo {
   def update(id: Long, tweet: Tweet): Future[Int]
   def delete(id: Long): Future[Int]
   def count: Future[Int]
+  def indexTweets(): Future[Unit]
+  def recommendFor(id: Long): Future[List[SearchResult]]
 }
 
+@Singleton
 class TweetsRepoImpl extends TweetsRepo {
 
   /* initialize repository */
@@ -28,6 +35,7 @@ class TweetsRepoImpl extends TweetsRepo {
     case Success(_) => println("TweetsRepoImpl initialized")
     case Failure(t) => println("Initialization error has occured: " + t.getMessage)
   }
+  val corpus = new Corpus()
 
   private def filterById(id: Long) = tweets.filter(_.id === id)
 
@@ -38,4 +46,6 @@ class TweetsRepoImpl extends TweetsRepo {
   def update(id: Long, tweet: Tweet): Future[Int] = db.run(filterById(id).update(tweet))
   def delete(id: Long): Future[Int] = db.run(filterById(id).delete)
   def count: Future[Int] = db.run(tweets.length.result)
+  def indexTweets(): Future[Unit] = list.map(tweets => corpus.index(tweets.toList.map(tweet => new Document(tweet.message))))
+  def recommendFor(id: Long): Future[List[SearchResult]] = findById(id).map(tweet => corpus.search(tweet.message))
 }

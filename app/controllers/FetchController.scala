@@ -27,7 +27,6 @@ class FetchController @Inject()(
     val tags = request.queryString.get("tag")
     val uuid = java.util.UUID.randomUUID.toString
 
-    // TODO Terminate master when its work is done
     val fetchMaster = twitter.actorOf(FetchActorMaster.props(uuid, tags, tweetsRepo), "FetchMaster-"+uuid)
     masterMap += (uuid -> fetchMaster)
 

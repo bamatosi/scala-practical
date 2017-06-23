@@ -101,13 +101,16 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
                 httpClient.singleRequest(fetch(authToken, nextResults)).pipeTo(self)
               case Some(_) if pages == 0 =>
                 context.parent ! FetchActorMaster.StatusUpdate(tag, 1)
+                context.stop(self)
               case None =>
                 log.info("No more results")
                 context.parent ! FetchActorMaster.StatusUpdate(tag, 1)
+                context.stop(self)
             }
           case e: JsError =>
             log.error(e.toString)
             context.parent ! FetchActorMaster.StatusUpdate(tag, -1)
+            context.stop(self)
         }
       }
 

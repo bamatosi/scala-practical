@@ -39,6 +39,20 @@ class TweetsController @Inject()(
       }
   }
 
+  def recommendFor(id: Int): Action[AnyContent] = Action.async { implicit request =>
+    println(tweetsRepo)
+    tweetsRepo
+      .recommendFor(id)
+      .map(searchResults =>
+        Ok(searchResults.toString())
+      )
+//      .recover {
+//        case ex: Exception =>
+//          val error = Error("Controller", "Recommending for #" + id + " failed: " + ex.getMessage)
+//          InternalServerError(Json.toJson(error))
+//      }
+  }
+
   // save new tweet
   def save: Action[AnyContent] = Action.async { implicit request =>
     tweetForm.bindFromRequest.fold(
