@@ -1,4 +1,4 @@
-import model.{Corpus, Document, SearchResult, TfIdfVector}
+import model._
 import org.scalatestplus.play._
 import org.scalatest._
 import play.api.test._
@@ -11,8 +11,6 @@ class SearchSpec extends PlaySpec {
     "The unexamined life is not worth living",
     "Never stop learning"
   )
-
-  val phrase = Document("never stop", 0L)
 
   val doc1 = Document(documents.head, 1L)
   val doc2 = Document(documents(1), 2L)
@@ -52,6 +50,7 @@ class SearchSpec extends PlaySpec {
   }
 
   "Index lookup should work properly" in {
+    val phrase = Document("never stop", 0L)
     val phraseVector = TfIdfVector(phrase, corpus.idf)
     val lookup = corpus.tfidfLookup(phraseVector)
     lookup.size mustBe 1
@@ -59,20 +58,27 @@ class SearchSpec extends PlaySpec {
   }
 
   "Corpus returns proper results when searched" in {
-    corpus.search("life learning", 3).toString() should equal(List(
-      SearchResult(doc3.toString, 0.30263669792912185),
-      SearchResult(doc1.toString, 0.2757854081643117),
-      SearchResult(doc2.toString, 0.2048221980047982)
+    val phrase1 = Document("life learning", 0L)
+    corpus.search(phrase1, 3).toString() should equal(List(
+      SearchResult(doc3.toString, 0.30263669792912185, doc3.docId),
+      SearchResult(doc1.toString, 0.2757854081643117, doc1.docId),
+      SearchResult(doc2.toString, 0.2048221980047982, doc2.docId)
     ).toString)
 
     // "The unexamined life is not worth living" should not be here since it should be excluded by index
-    corpus.search("never stop learning", 3).toString() should equal(List(
-      SearchResult(doc3.toString, 1.0),
-      SearchResult(doc1.toString, 0.08346278526388236)
+    val phrase2 = Document("never stop learning", 0L)
+    corpus.search(phrase2, 3).toString() should equal(List(
+      SearchResult(doc3.toString, 1.0, doc3.docId),
+      SearchResult(doc1.toString, 0.08346278526388236, doc1.docId)
     ).toString)
 
-    corpus.search("never stop learning", 1).toString() should equal(List(
-      SearchResult(doc3.toString, 1.0)
+    corpus.search(phrase2, 1).toString() should equal(List(
+      SearchResult(doc3.toString, 1.0, doc3.docId)
     ).toString())
+
+    // Testing for excluding phrase from results
+    corpus.search(doc3, 3).toString() should equal(List(
+      SearchResult(doc1.toString, 0.08346278526388236, doc1.docId)
+    ).toString)
   }
 }

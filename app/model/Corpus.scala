@@ -11,8 +11,15 @@ class Corpus() {
   var idf: Map[String, Double] = Map.empty
   var tfidf: Map[Word, List[TfIdfVector]] = Map.empty
   var indexing: Boolean = false
+  var corpusSize = 0
 
-  def tfidfLookup(tfIdfVector: TfIdfVector): List[TfIdfVector] = tfidf.filter(e => tfIdfVector.originalDoc.words.contains(e._1)).values.foldLeft(List.empty[TfIdfVector])(_ ++ _).distinct
+  def tfidfLookup(tfIdfVector: TfIdfVector): List[TfIdfVector] =
+    tfidf
+      .filter(e => tfIdfVector.originalDoc.words.contains(e._1)) // Take only vectors for word thaat exist in phrase
+      .values
+      .foldLeft(List.empty[TfIdfVector])(_ ++ _) // Combine lists for words from phrase
+      .distinct // We need only unique values
+      .filterNot(vector => vector.originalDoc.docId == tfIdfVector.originalDoc.docId) // Filter out
 
   def sortResults(s1: SearchResult, s2: SearchResult): Boolean = s1.similarity >= s2.similarity
 
@@ -33,15 +40,15 @@ class Corpus() {
       .groupBy(_._1)
       .mapValues(docs => docs.map(doc => TfIdfVector(doc._2, idf)))
     indexing = false
-    println(s"Indexing completed idf: ${idf.size} terms, tfidf index size ${tfidf.size} with total ${tfidf.mapValues(_.size).values.sum} entries for ${corpus.size} documents")
+    corpusSize = corpus.size
+    println(s"Indexing completed idf: ${idf.size} terms, tfidf index size ${tfidf.size} with total ${tfidf.mapValues(_.size).values.sum} entries for $corpusSize documents")
   }
 
-  def search(phrase: Word, numberOfResults: Int): List[SearchResult] = {
-    println(s"Searching for $phrase on corpus of ${tfidf.size} docs")
+  def search(phrase: Document, numberOfResults: Int): List[SearchResult] = {
+    println(s"Searching for ${phrase.toString} on corpus of $corpusSize docs")
     if (indexing) throw new IndexBusyException()
     else {
-      val doc = Document(phrase.toLowerCase(), 0L)
-      val phraseVector = TfIdfVector(doc, idf)
+      val phraseVector = TfIdfVector(phrase, idf)
       tfidfLookup(phraseVector)
         .map((docVector: TfIdfVector) =>
           SearchResult(docVector.originalDoc.toString, phraseVector.cosineWith(docVector), docVector.originalDoc.docId)

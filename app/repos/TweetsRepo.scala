@@ -47,5 +47,5 @@ class TweetsRepoImpl extends TweetsRepo {
   def delete(id: Long): Future[Int] = db.run(filterById(id).delete)
   def count: Future[Int] = db.run(tweets.length.result)
   def indexTweets(): Future[Unit] = list.map(tweets => corpus.index(tweets.toList.map(tweet => Document(tweet.message, tweet.id.get))))
-  def recommendFor(id: Long, numberOfResults: Int): Future[List[SearchResult]] = findById(id).map(tweet => corpus.search(tweet.message, numberOfResults))
+  def recommendFor(id: Long, numberOfResults: Int): Future[List[SearchResult]] = findById(id).map(tweet => corpus.search(new Document(tweet.message.toLowerCase(), tweet.id.get), numberOfResults))
 }
