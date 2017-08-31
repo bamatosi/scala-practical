@@ -3,7 +3,7 @@ import model.Types.Word
 /**
   * representing document that can be indexed
   */
-class Document(doc: Word) {
+case class Document(doc: Word, docId: Long) {
   val words: List[Word] = doc.toLowerCase.split("\\W+").toList
   val totalWordCount: Int = words.size
   val wordsCount: Map[String, Double] = words

@@ -3,7 +3,7 @@ package model
 /**
   * Representation of vector tfidf
   */
-class TfIdfVector(doc: Document, idf: Map[String, Double]) {
+case class TfIdfVector(doc: Document, idf: Map[String, Double]) {
   val originalDoc: Document = doc
   def tfidf(tf: Double, idf: Double): Double = tf * idf
   val length: Double = Math.sqrt(doc.tf.keys.toList
@@ -25,8 +25,6 @@ class TfIdfVector(doc: Document, idf: Map[String, Double]) {
     val lengths = {
       length * other.length
     }
-    println(s"Comparing\n\t${doc.words} with\n\t${other.originalDoc.words}")
-    println(s"\t-----> $dotProduct/$lengths")
     dotProduct/lengths
   }
   override def toString: String = doc.toString()

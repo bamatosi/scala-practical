@@ -64,7 +64,6 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
       val numberProcessed = workLoad.values.groupBy(identity).mapValues(_.size).getOrElse("done",0)
       val numberAll = workLoad.keys.size
       if (numberProcessed == numberAll) {
-        println(tweetsRepo)
         tweetsRepo.indexTweets()
         context.stop(self)
       }

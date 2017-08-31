@@ -8,6 +8,7 @@ import play.api.data.Forms._
 import model.{Error, Tweet}
 import model.TweetJSON._
 import model.ErrorJSON._
+import model.SearchResultJSON._
 import repos.TweetsRepoImpl
 import concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -39,18 +40,17 @@ class TweetsController @Inject()(
       }
   }
 
-  def recommendFor(id: Int): Action[AnyContent] = Action.async { implicit request =>
-    println(tweetsRepo)
+  def recommendFor(id: Int, n: Int): Action[AnyContent] = Action.async { implicit request =>
     tweetsRepo
-      .recommendFor(id)
+      .recommendFor(id, n)
       .map(searchResults =>
-        Ok(searchResults.toString())
+        Ok(Json.toJson(searchResults))
       )
-//      .recover {
-//        case ex: Exception =>
-//          val error = Error("Controller", "Recommending for #" + id + " failed: " + ex.getMessage)
-//          InternalServerError(Json.toJson(error))
-//      }
+      .recover {
+        case ex: Exception =>
+          val error = Error("Controller", "Recommending for #" + id + " failed: " + ex.getMessage)
+          InternalServerError(Json.toJson(error))
+      }
   }
 
   // save new tweet

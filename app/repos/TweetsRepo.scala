@@ -19,7 +19,7 @@ trait TweetsRepo {
   def delete(id: Long): Future[Int]
   def count: Future[Int]
   def indexTweets(): Future[Unit]
-  def recommendFor(id: Long): Future[List[SearchResult]]
+  def recommendFor(id: Long, numberOfResults: Int): Future[List[SearchResult]]
 }
 
 @Singleton
@@ -46,6 +46,6 @@ class TweetsRepoImpl extends TweetsRepo {
   def update(id: Long, tweet: Tweet): Future[Int] = db.run(filterById(id).update(tweet))
   def delete(id: Long): Future[Int] = db.run(filterById(id).delete)
   def count: Future[Int] = db.run(tweets.length.result)
-  def indexTweets(): Future[Unit] = list.map(tweets => corpus.index(tweets.toList.map(tweet => new Document(tweet.message))))
-  def recommendFor(id: Long): Future[List[SearchResult]] = findById(id).map(tweet => corpus.search(tweet.message))
+  def indexTweets(): Future[Unit] = list.map(tweets => corpus.index(tweets.toList.map(tweet => Document(tweet.message, tweet.id.get))))
+  def recommendFor(id: Long, numberOfResults: Int): Future[List[SearchResult]] = findById(id).map(tweet => corpus.search(tweet.message, numberOfResults))
 }

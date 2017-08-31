@@ -18,16 +18,6 @@ class ApplicationSpec extends PlaySpec with OneAppPerTest {
 
   }
 
-  "HomeController" should {
-    "render the index page" in {
-      val home = route(app, FakeRequest(GET, "/")).get
-
-      status(home) mustBe OK
-      contentType(home) mustBe Some("text/plain")
-      contentAsString(home) must include ("Your new application is ready.")
-    }
-  }
-
   "TweetsController" should {
     "save the tweet" in {
       val postJson = Json.obj("author" -> "tstauthor", "message" -> "loremipsum", "link" -> "http://someline.pl")
