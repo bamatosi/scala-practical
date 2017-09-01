@@ -36,7 +36,7 @@ class FetchActorWorker(tag: String, authToken: String, tweetsRepo: TweetsRepoImp
   /* Params */
   val encodedTag: String = URLEncoder.encode(tag, "UTF-8")
   var defaultFetchParams: String = s"?q=$encodedTag&count=5&include_entities=1"
-  var pages: Int = 20
+  var pages: Int = 50
   val basePath: String = "https://api.twitter.com/1.1/search/tweets.json"
 
   val log: LoggingAdapter = Logging(context.system, this)

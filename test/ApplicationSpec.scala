@@ -30,4 +30,26 @@ class ApplicationSpec extends PlaySpec with OneAppPerTest {
     }
   }
 
+  "FetchController" should {
+    "execute fetch process" in {
+      val qs = "tag=%23scala&tag=%23spark&tag=%23cassandra&tag=%23java&tag=%23redis&tag=%23bigdata&tag=%23iot"
+      val fetchUrl = s"${controllers.routes.FetchController.fetch().url}?$qs"
+      val result = route(app,
+        FakeRequest(POST, fetchUrl)
+      ).get
+      status(result) mustBe OK
+      val uuid = contentAsString(result)
+
+      Thread.sleep(1000)
+
+      val statusUrl = s"${controllers.routes.FetchController.status(uuid).url}"
+      println(s"Calling $statusUrl")
+      val statusResult = route(app,
+        FakeRequest(GET, statusUrl)
+      ).get
+      status(statusResult) mustBe OK
+      println(contentAsString(statusResult))
+    }
+  }
+
 }

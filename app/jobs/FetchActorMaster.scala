@@ -1,5 +1,8 @@
 package jobs
 
+import java.time.LocalDateTime
+import java.util.Calendar
+
 import akka.actor.Actor
 import akka.event.Logging
 import akka.actor.Props
@@ -7,8 +10,10 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
+import model.FetchStatusReport
 import play.api.libs.json._
 import repos.TweetsRepoImpl
+
 import scala.collection.mutable
 
 object FetchActorMaster {
@@ -38,6 +43,7 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
   /* Twitter auth and REST API config  */
   val consumerKey = "eY4xR9bzT9kc84URZMbAYSsjw"
   val consumerSecret = "uVqLYmQDdfGe2pbr5npzR3CzU7PCbHR5ZF79MftR7CvFpoFG5U"
+  val startTime: LocalDateTime = LocalDateTime.now()
 
   override def preStart(): Unit = {
     log.info("Starting Master and authenticating to twitter API")
@@ -51,7 +57,7 @@ class FetchActorMaster(uuid: String, tags: Option[Seq[String]], tweetsRepo: Twee
   def receive: PartialFunction[Any, Unit] = {
     case FetchActorMaster.StatusPropagate =>
       log.info("Propagating status")
-      sender() ! workLoad
+      sender() ! FetchStatusReport(startTime, workLoad)
 
     case FetchActorMaster.StatusUpdate(tag, progress) => {
       log.info(s"Updating status for $tag: $progress")

@@ -1,18 +1,23 @@
 package controllers
 
 import javax.inject._
+
 import play.api.mvc._
 import play.api.libs.json.Json
 import akka.util.Timeout
 import java.util.concurrent.TimeUnit
+
 import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.{AskTimeoutException, ask}
+
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import jobs.FetchActorMaster
 import repos.TweetsRepoImpl
-import model.Error
+import model.{Error, FetchStatusReport}
 import model.ErrorJSON._
+import model.FetchStatusReportJSON._
+
 import scala.collection.mutable
 
 @Singleton
@@ -30,14 +35,14 @@ class FetchController @Inject()(
     val fetchMaster = twitter.actorOf(FetchActorMaster.props(uuid, tags, tweetsRepo), "FetchMaster-"+uuid)
     masterMap += (uuid -> fetchMaster)
 
-    Ok("Started "+uuid)
+    Ok(uuid)
   }
 
   def status(uuid: String): Action[AnyContent] = Action.async { implicit request =>
     if (masterMap.contains(uuid)) {
       val fetchMaster = masterMap(uuid)
       implicit val timeout = Timeout(10, TimeUnit.SECONDS)
-      val statusFuture = (fetchMaster ? FetchActorMaster.StatusPropagate).mapTo[mutable.Map[String,String]]
+      val statusFuture = (fetchMaster ? FetchActorMaster.StatusPropagate).mapTo[FetchStatusReport]
       statusFuture.map(result => {
         Ok(Json.toJson(result))
        }).recover {
